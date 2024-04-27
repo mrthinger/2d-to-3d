@@ -1,0 +1,6 @@
+.venv
+.DS_Store
+checkpoints
+__pycache__
+out
+test10.avi
