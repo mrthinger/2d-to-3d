@@ -74,7 +74,7 @@ def resize_and_pad(frames_batch: torch.Tensor):
 
     # Scale height to 518 (518/14 = 37)
     # TODO: auto determine this or set to 77
-    target_height = 77 * 14  # 37 -> 77 patches (increased res / less downscale)
+    target_height = 77 * 14 * 2 # 37 -> 77 patches (increased res / less downscale)
 
     target_width = int(target_height * aspect_ratio)
 
@@ -112,6 +112,6 @@ def get_video_info(filepath: str) -> VideoInfo:
     return VideoInfo(
         width=int(video_info["width"]),
         height=int(video_info["height"]),
-        num_frames=int(video_info["nb_frames"]),
+        num_frames=int(179468),
         framerate=video_info["avg_frame_rate"],
     )

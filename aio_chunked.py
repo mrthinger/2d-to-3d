@@ -24,7 +24,7 @@ from funcs import (
 
 @dataclass
 class Args:
-    video_path: str = "./test10.avi"
+    video_path: str = "./sw.mkv"
     encoder: EncoderType = "vitl"  #  vits, vitb, vitl
     outdir: str = "./out"
 
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         endpoint_url=BUCKET_HOST, key=AWS_ACCESS_KEY_ID, secret=AWS_SECRET_ACCESS_KEY
     )
 
-    BATCH_SIZE = 2
+    BATCH_SIZE = 1
     DEVICE = "mps"
     # DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     DTYPE = torch.float16
@@ -58,12 +58,10 @@ if __name__ == "__main__":
 
     output_width = vinfo.width * 2  # side by side
 
-    CHUNK_SIZE = 32 * 1024 * 1024  # 32GB in bytes
+    CHUNK_SIZE = 8 * 1024 * 1024 * 1024  # 32GB in bytes
     CHUNK_FRAMES = CHUNK_SIZE // (vinfo.width * vinfo.height * 3)
 
-    vbuffer = np.zeros(
-        (CHUNK_FRAMES, vinfo.height, output_width, 3), dtype=np.uint8
-    )
+    vbuffer = np.zeros((CHUNK_FRAMES, vinfo.height, output_width, 3), dtype=np.uint8)
 
     print(
         "Memory size of numpy video_buffer in bytes:",
@@ -76,7 +74,7 @@ if __name__ == "__main__":
             threads=16,
             thread_queue_size=8192,
         )
-        .output("pipe:", format="rawvideo", pix_fmt="rgb24")
+        .output("pipe:", format="rawvideo", pix_fmt="rgb24", loglevel="quiet")
         .run_async(pipe_stdout=True)
     )
 
@@ -112,9 +110,12 @@ if __name__ == "__main__":
         threads=16,
         framerate=vinfo.framerate,
         s=f"{output_width}x{vinfo.height}",
+        loglevel="quiet",
     )
 
     process_output = output.overwrite_output().run_async(pipe_stdin=True)
+
+    progress_bar = tqdm(total=vinfo.num_frames, unit="frames")
 
     for chunk_start in range(0, vinfo.num_frames, CHUNK_FRAMES):
         chunk_end = min(chunk_start + CHUNK_FRAMES, vinfo.num_frames)
@@ -129,7 +130,7 @@ if __name__ == "__main__":
                 [vinfo.height, vinfo.width, 3]
             )
 
-        for i in tqdm(range(0, chunk_frames, BATCH_SIZE), unit=f"{BATCH_SIZE} frames"):
+        for i in range(0, chunk_frames, BATCH_SIZE):
             batch_start = i
             batch_end = min(i + BATCH_SIZE, chunk_frames)
             batch_size = batch_end - batch_start
@@ -165,6 +166,12 @@ if __name__ == "__main__":
             # Write the processed batch to the output stream
             for frame in vbuffer[batch_start:batch_end]:
                 process_output.stdin.write(frame.tobytes())
+                progress_bar.update(1)
+
+        # Write the processed batch to the output stream
+        # for frame in vbuffer[:chunk_frames]:
+        #     process_output.stdin.write(frame.tobytes())
+        #     progress_bar.update(1)
 
     process.wait()
     process_output.stdin.close()
