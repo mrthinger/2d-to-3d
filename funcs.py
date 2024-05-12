@@ -1,7 +1,4 @@
-import argparse
-import time
 from typing import Literal
-import numpy as np
 import os
 import torch
 import torch.nn.functional as F
@@ -87,7 +84,7 @@ def resize_and_pad(frames_batch: torch.Tensor):
     resized_frames = F.interpolate(
         frames_batch,
         size=(target_height, target_width),
-        mode="bilinear", # TODO: bicubic on cuda
+        mode="bilinear",  # TODO: bicubic on cuda
         align_corners=False,
     )
     return resized_frames

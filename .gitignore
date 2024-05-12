@@ -4,3 +4,4 @@ checkpoints
 __pycache__
 out
 test10.avi
+.env

@@ -1,0 +1,16 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: 3d-s3
+  namespace: dan
+spec:
+  hosts:
+    - "3d-bucket.mrthinger.com" # calling this s3.allvoice.ai causes chrome to think its a scam/dangerous
+  gateways:
+    - mrthinger/mrthinger-gateway
+  http:
+    - route:
+        - destination:
+            host: rook-ceph-rgw-hdd-data-ssd-meta-object-store.rook-ceph.svc.cluster.local
+            port:
+              number: 80

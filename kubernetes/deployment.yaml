@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: 3d
+  namespace: dan
+spec:
+  selector:
+    matchLabels:
+      app: 3d
+  template:
+    metadata:
+      labels:
+        app: 3d
+    spec:
+      containers:
+        - name: 3d
+          image: harbor.kymyth.com/kymyth/3d:latest
+          ports:
+            - containerPort: 8080

@@ -1,0 +1,9 @@
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: dan-bucket
+  namespace: dan
+spec:
+  generateBucketName: dan-bucket
+  storageClassName: hdd-data-ssd-meta-bucket
+  

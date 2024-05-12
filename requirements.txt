@@ -3,3 +3,8 @@ torchvision
 numpy
 ffmpeg-python
 tqdm
+s3fs
+python-dotenv
+fastapi
+uvicorn[standard]
+pydantic
