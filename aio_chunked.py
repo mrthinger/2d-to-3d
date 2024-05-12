@@ -41,7 +41,7 @@ if __name__ == "__main__":
     #     endpoint_url=BUCKET_HOST, key=AWS_ACCESS_KEY_ID, secret=AWS_SECRET_ACCESS_KEY
     # )
 
-    BATCH_SIZE = 1
+    BATCH_SIZE = 2
     DEVICE = "cuda"
     # DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     DTYPE = torch.float16
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     output_width = vinfo.width * 2  # side by side
 
-    CHUNK_SIZE = 1 * 1024 * 1024 * 1024  # GB
+    CHUNK_SIZE = 2 * 1024 * 1024 * 1024  # GB
     CHUNK_FRAMES = CHUNK_SIZE // (vinfo.width * vinfo.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, vinfo.height, output_width, 3), dtype=np.uint8)

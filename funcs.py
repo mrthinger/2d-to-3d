@@ -109,9 +109,28 @@ class VideoInfo:
 def get_video_info(filepath: str) -> VideoInfo:
     probe = ffmpeg.probe(filepath)
     video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
+
+    if "nb_frames" not in video_info:
+        duration_str = video_info["tags"]["DURATION"]
+        
+        hours, minutes, seconds = duration_str.split(':')
+        duration = float(hours) * 3600 + float(minutes) * 60 + float(seconds)
+        
+        framerate = video_info["avg_frame_rate"]
+        if "/" in framerate:
+            num, denom = framerate.split("/")
+            framerate = float(num) / float(denom)
+        else:
+            framerate = float(framerate)
+        
+        num_frames = int(duration * framerate)
+    else:
+        num_frames = int(video_info["nb_frames"])
+    
+
     return VideoInfo(
         width=int(video_info["width"]),
         height=int(video_info["height"]),
-        num_frames=int(179468),
+        num_frames=num_frames,
         framerate=video_info["avg_frame_rate"],
     )
