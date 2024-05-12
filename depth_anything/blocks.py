@@ -151,6 +151,7 @@ class FeatureFusionBlock(nn.Module):
 
         # Apply interpolation using vmap
         output = torch.vmap(interpolate_slice)(output)
+        output = output.squeeze(dim=1)
         output = self.out_conv(output)
 
         return output
