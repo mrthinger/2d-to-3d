@@ -24,25 +24,25 @@ from funcs import (
 
 @dataclass
 class Args:
-    video_path: str = "./sw.mkv"
+    video_path: str = "./sw_middle_10s.mkv"
     encoder: EncoderType = "vitl"  #  vits, vitb, vitl
     outdir: str = "./out"
 
 
-BUCKET_NAME = os.environ["BUCKET_NAME"]
-AWS_ACCESS_KEY_ID = os.environ["AWS_ACCESS_KEY_ID"]
-AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
-BUCKET_HOST = os.environ["BUCKET_HOST"]
+# BUCKET_NAME = os.environ["BUCKET_NAME"]
+# AWS_ACCESS_KEY_ID = os.environ["AWS_ACCESS_KEY_ID"]
+# AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
+# BUCKET_HOST = os.environ["BUCKET_HOST"]
 
 
 if __name__ == "__main__":
     args = Args()
-    s3 = s3fs.S3FileSystem(
-        endpoint_url=BUCKET_HOST, key=AWS_ACCESS_KEY_ID, secret=AWS_SECRET_ACCESS_KEY
-    )
+    # s3 = s3fs.S3FileSystem(
+    #     endpoint_url=BUCKET_HOST, key=AWS_ACCESS_KEY_ID, secret=AWS_SECRET_ACCESS_KEY
+    # )
 
     BATCH_SIZE = 1
-    DEVICE = "mps"
+    DEVICE = "cuda"
     # DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     DTYPE = torch.float16
     print(DEVICE, DTYPE)
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     output_width = vinfo.width * 2  # side by side
 
-    CHUNK_SIZE = 8 * 1024 * 1024 * 1024  # 32GB in bytes
+    CHUNK_SIZE = 1 * 1024 * 1024 * 1024  # GB
     CHUNK_FRAMES = CHUNK_SIZE // (vinfo.width * vinfo.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, vinfo.height, output_width, 3), dtype=np.uint8)
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         args.outdir,
         output_name,
     )
-    bucket_output_path = f"{BUCKET_NAME}/{output_name}"
+    # bucket_output_path = f"{BUCKET_NAME}/{output_name}"
 
     in_modified = ffmpeg.input(
         "pipe:",
@@ -99,6 +99,7 @@ if __name__ == "__main__":
         filepath,
         thread_queue_size=8192,
         vn=None,
+        sn=None,
     )
     output = ffmpeg.output(
         in_modified,
@@ -121,6 +122,7 @@ if __name__ == "__main__":
         chunk_end = min(chunk_start + CHUNK_FRAMES, vinfo.num_frames)
         chunk_frames = chunk_end - chunk_start
 
+        progress_bar.set_description('reading')
         for i in range(chunk_frames):
             in_bytes = process.stdout.read(vinfo.width * vinfo.height * 3)
             if not in_bytes:
@@ -131,6 +133,7 @@ if __name__ == "__main__":
             )
 
         for i in range(0, chunk_frames, BATCH_SIZE):
+            progress_bar.set_description('depthing')
             batch_start = i
             batch_end = min(i + BATCH_SIZE, chunk_frames)
             batch_size = batch_end - batch_start
@@ -164,6 +167,7 @@ if __name__ == "__main__":
             vbuffer[batch_start:batch_end, :, vinfo.width :, :] = depth_color_batch
 
             # Write the processed batch to the output stream
+            progress_bar.set_description('writing')
             for frame in vbuffer[batch_start:batch_end]:
                 process_output.stdin.write(frame.tobytes())
                 progress_bar.update(1)

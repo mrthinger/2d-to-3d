@@ -84,7 +84,7 @@ def resize_and_pad(frames_batch: torch.Tensor):
     resized_frames = F.interpolate(
         frames_batch,
         size=(target_height, target_width),
-        mode="bilinear",  # TODO: bicubic on cuda
+        mode="bicubic",  # TODO: bicubic on cuda
         align_corners=False,
     )
     return resized_frames
