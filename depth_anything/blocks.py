@@ -1,5 +1,5 @@
 import torch.nn as nn
-
+import torch
 
 def _make_scratch(in_shape, out_shape, groups=1, expand=False):
     scratch = nn.Module()
@@ -144,10 +144,13 @@ class FeatureFusionBlock(nn.Module):
         else:
             modifier = {"size": size}
 
-        output = nn.functional.interpolate(
-            output, **modifier, mode="bilinear", align_corners=self.align_corners
-        )
+        def interpolate_slice(output_slice):
+            return nn.functional.interpolate(
+                output_slice[None], **modifier, mode="bilinear", align_corners=self.align_corners
+            )
 
+        # Apply interpolation using vmap
+        output = torch.vmap(interpolate_slice)(output)
         output = self.out_conv(output)
 
         return output
