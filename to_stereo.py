@@ -5,23 +5,7 @@ from numpy.typing import NDArray
 from tqdm import tqdm
 from datetime import datetime
 
-@dataclass
-class VideoInfo:
-    width: int
-    height: int
-    num_frames: int
-    framerate: str
-
-
-def get_video_info(filepath):
-    probe = ffmpeg.probe(filepath)
-    video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
-    width = int(video_info["width"])
-    height = int(video_info["height"])
-    num_frames = int(video_info["nb_frames"])
-    framerate = video_info["avg_frame_rate"]
-    return VideoInfo(width, height, num_frames, framerate)
-
+from funcs import VideoInfo, get_video_info
 
 def load_video_buffer(filepath, video_info: VideoInfo):
     video_buffer = np.zeros(
@@ -55,6 +39,7 @@ def write_output_video(output_path, video_buffer: NDArray, video_info: VideoInfo
     in_original = ffmpeg.input(
         filepath,
         vn=None,
+        sn=None,
         thread_queue_size=8192,
     )
     output = ffmpeg.output(
@@ -67,6 +52,7 @@ def write_output_video(output_path, video_buffer: NDArray, video_info: VideoInfo
         threads=16,
         framerate=video_info.framerate,
         s=f"{video_info.width}x{video_info.height}",
+        # strict="-2", truehd audio causes issues
     )
     process = output.overwrite_output().run_async(pipe_stdin=True)
     for frame in video_buffer:
