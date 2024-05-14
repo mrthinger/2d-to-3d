@@ -24,9 +24,9 @@ from funcs import (
 
 @dataclass
 class Args:
-    video_path: str = "./sw_middle_10s.mkv"
+    video_path: str = "./build/og/sw_qt.mp4"
     encoder: EncoderType = "vitl"  #  vits, vitb, vitl
-    outdir: str = "./out"
+    outdir: str = "./build/depth"
 
 
 # BUCKET_NAME = os.environ["BUCKET_NAME"]
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     #     endpoint_url=BUCKET_HOST, key=AWS_ACCESS_KEY_ID, secret=AWS_SECRET_ACCESS_KEY
     # )
 
-    BATCH_SIZE = 2
+    BATCH_SIZE = 8
     DEVICE = "cuda"
     # DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     DTYPE = torch.float16
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     output_width = vinfo.width * 2  # side by side
 
-    CHUNK_SIZE = 2 * 1024 * 1024 * 1024  # GB
+    CHUNK_SIZE = 4 * 1024 * 1024 * 1024  # GB
     CHUNK_FRAMES = CHUNK_SIZE // (vinfo.width * vinfo.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, vinfo.height, output_width, 3), dtype=np.uint8)
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     process = (
         ffmpeg.input(
             filepath,
-            threads=16,
+            threads=0,
             thread_queue_size=8192,
         )
         .output("pipe:", format="rawvideo", pix_fmt="rgb24", loglevel="quiet")
@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
     filename = os.path.basename(filepath)
     timestamp = time.strftime("%H%M%S")
-    output_name = filename[: filename.rfind(".")] + f"_video_depth_{timestamp}.mkv"
+    output_name = filename[: filename.rfind(".")] + f"_video_depth_{timestamp}.mp4"
     local_output_path = os.path.join(
         args.outdir,
         output_name,
@@ -108,7 +108,7 @@ if __name__ == "__main__":
         acodec="copy",
         crf=11,
         preset="faster",
-        threads=16,
+        threads=0,
         framerate=vinfo.framerate,
         s=f"{output_width}x{vinfo.height}",
         loglevel="quiet",
@@ -117,12 +117,17 @@ if __name__ == "__main__":
     process_output = output.overwrite_output().run_async(pipe_stdin=True)
 
     progress_bar = tqdm(total=vinfo.num_frames, unit="frames")
+    write_progress_bar = tqdm(total=0, unit="frames", leave=False)
+
 
     for chunk_start in range(0, vinfo.num_frames, CHUNK_FRAMES):
         chunk_end = min(chunk_start + CHUNK_FRAMES, vinfo.num_frames)
         chunk_frames = chunk_end - chunk_start
 
-        progress_bar.set_description('reading')
+        write_progress_bar.total = chunk_frames
+        write_progress_bar.reset()
+
+        progress_bar.set_description('read')
         for i in range(chunk_frames):
             in_bytes = process.stdout.read(vinfo.width * vinfo.height * 3)
             if not in_bytes:
@@ -133,7 +138,7 @@ if __name__ == "__main__":
             )
 
         for i in range(0, chunk_frames, BATCH_SIZE):
-            progress_bar.set_description('depthing')
+            progress_bar.set_description('depth')
             batch_start = i
             batch_end = min(i + BATCH_SIZE, chunk_frames)
             batch_size = batch_end - batch_start
@@ -166,19 +171,23 @@ if __name__ == "__main__":
 
             vbuffer[batch_start:batch_end, :, vinfo.width :, :] = depth_color_batch
 
+            progress_bar.update(batch_size)
             # Write the processed batch to the output stream
-            progress_bar.set_description('writing')
-            for frame in vbuffer[batch_start:batch_end]:
-                process_output.stdin.write(frame.tobytes())
-                progress_bar.update(1)
+            # progress_bar.set_description('writing')
+            # for frame in vbuffer[batch_start:batch_end]:
+            #     process_output.stdin.write(frame.tobytes())
 
-        # Write the processed batch to the output stream
-        # for frame in vbuffer[:chunk_frames]:
-        #     process_output.stdin.write(frame.tobytes())
-        #     progress_bar.update(1)
+
+
+        progress_bar.set_description('write')
+        for frame in vbuffer[:chunk_frames]:
+            process_output.stdin.write(frame.tobytes())
+            write_progress_bar.update(1)
 
     process.wait()
     process_output.stdin.close()
     process_output.wait()
+    write_progress_bar.close()
+    progress_bar.close()
 
     # s3.put(local_output_path, bucket_output_path, callback=TqdmCallback())
