@@ -107,6 +107,8 @@ if __name__ == "__main__":
         local_output_path,
         acodec="copy",
         crf=11,
+        # vcodec="libx264",
+        # pix_fmt="yuv420p",
         preset="faster",
         threads=0,
         framerate=vinfo.framerate,
