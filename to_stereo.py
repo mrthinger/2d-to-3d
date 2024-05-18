@@ -29,7 +29,7 @@ def create_side_by_side_video(video_buffer: NDArray, max_shift: int):
     left_eye_view = original_video
     right_eye_view = np.zeros((num_frames, height, single_video_width, 3), dtype=np.uint8)
     
-    for i in tqdm(range(num_frames)):
+    for i in range(num_frames):
         for y in range(height):
             shifts = depth_map[i, y, :]
             shifted_xs = np.clip(np.arange(single_video_width) + shifts, 0, single_video_width - 1)
@@ -44,7 +44,11 @@ def create_side_by_side_video(video_buffer: NDArray, max_shift: int):
 if __name__ == "__main__":
     os.makedirs('./build/sbs', exist_ok=True)
 
-    filename = "sw_qt_video_depth_211953.mp4"
+    # filename = "sw-depth-000.mp4"
+    # filepath = f"./build/split/{filename}"
+
+  
+    filename = "fixed.mp4"
     filepath = f"./build/depth/{filename}"
     max_shift = 20
 
@@ -52,7 +56,7 @@ if __name__ == "__main__":
     video_info = get_video_info(filepath)
     output_width = video_info.width
 
-    CHUNK_SIZE = 32 * 1024 * 1024 * 1024  # GB
+    CHUNK_SIZE = 2 * 1024 * 1024 * 1024  # GB
     CHUNK_FRAMES = CHUNK_SIZE // (video_info.width * video_info.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, video_info.height, output_width, 3), dtype=np.uint8)
@@ -75,28 +79,30 @@ if __name__ == "__main__":
         s=f"{output_width}x{video_info.height}",
         framerate=video_info.framerate,
         thread_queue_size=8192,
+        hwaccel="videotoolbox",
     )
     in_original = ffmpeg.input(
         filepath,
         thread_queue_size=8192,
         vn=None,
         sn=None,
+        hwaccel="videotoolbox",
     )
     process_output = ffmpeg.output(
         in_modified,
         in_original,
         output_path,
         acodec="copy",
-        crf=11,
-        vcodec="libx264",
-        pix_fmt="yuv420p",
-        preset="faster",
+        vcodec="hevc_videotoolbox",
         threads=0,
         framerate=video_info.framerate,
         s=f"{output_width}x{video_info.height}",
         loglevel="quiet",
+        # preset="faster",
+        # pix_fmt="yuv420p",
+        # video_bitrate='8000k',
+        # **{'allow_sw': '1'}
     ).overwrite_output().run_async(pipe_stdin=True)
-
     progress_bar = tqdm(total=video_info.num_frames, unit="frames")
 
     for chunk_start in range(0, video_info.num_frames, CHUNK_FRAMES):
