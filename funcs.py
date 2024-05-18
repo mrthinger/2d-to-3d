@@ -111,19 +111,9 @@ def get_video_info(filepath: str) -> VideoInfo:
     video_info = next(s for s in probe["streams"] if s["codec_type"] == "video")
 
     if "nb_frames" not in video_info:
-        duration_str = video_info["tags"]["DURATION"]
-        
-        hours, minutes, seconds = duration_str.split(':')
-        duration = float(hours) * 3600 + float(minutes) * 60 + float(seconds)
-        
-        framerate = video_info["avg_frame_rate"]
-        if "/" in framerate:
-            num, denom = framerate.split("/")
-            framerate = float(num) / float(denom)
-        else:
-            framerate = float(framerate)
-        
-        num_frames = int(duration * framerate)
+        # Use ffprobe to get the number of frames
+        result = ffmpeg.probe(filepath, select_streams='v', show_entries='stream=nb_read_packets', count_packets=None)
+        num_frames = int(result['streams'][0]['nb_read_packets'])
     else:
         num_frames = int(video_info["nb_frames"])
     
