@@ -11,45 +11,37 @@ from funcs import VideoInfo, get_video_info
 def create_side_by_side_video(video_buffer: NDArray, max_shift: int):
     num_frames, height, width, _ = video_buffer.shape
     single_video_width = width // 2
-    side_by_side_buffer = np.zeros_like(video_buffer)
-    original_video = video_buffer[:, :, :single_video_width, :]
-    depth_map = video_buffer[:, :, single_video_width:, 0]
     
-    depth_map = depth_map.astype(np.float32)
-
+    depth_map = video_buffer[:, :, single_video_width:, 0].astype(np.float32)
     min_depth = np.min(depth_map)
     max_depth = np.max(depth_map)
     depth_range = max_depth - min_depth
     
     # Precalculate the disparity map using the depth map buffer
-    depth_map = (depth_map - min_depth) / depth_range
-    depth_map = (depth_map) * max_shift
+    depth_map -= min_depth
+    depth_map /= depth_range
+    depth_map *= max_shift
     depth_map = depth_map.astype(np.int32)
-    
-    left_eye_view = original_video
-    right_eye_view = np.zeros((num_frames, height, single_video_width, 3), dtype=np.uint8)
     
     for i in range(num_frames):
         for y in range(height):
             shifts = depth_map[i, y, :]
             shifted_xs = np.clip(np.arange(single_video_width) + shifts, 0, single_video_width - 1)
-            right_eye_view[i, y, :, :] = original_video[i, y, shifted_xs, :]
+            video_buffer[i, y, single_video_width:, :] = video_buffer[i, y, shifted_xs, :]
     
-    side_by_side_buffer[:, :, :single_video_width, :] = left_eye_view
-    side_by_side_buffer[:, :, single_video_width:, :] = right_eye_view
-    
-    return side_by_side_buffer
+    return video_buffer
 
 
 if __name__ == "__main__":
     os.makedirs('./build/sbs', exist_ok=True)
 
-    # filename = "sw-depth-000.mp4"
-    # filepath = f"./build/split/{filename}"
+    filename = "sw-depth-000.mp4"
+    filepath = f"./build/split/{filename}"
 
-  
-    filename = "fixed.mp4"
-    filepath = f"./build/depth/{filename}"
+    # filename = "fixed.mp4"
+    # filepath = f"./build/depth/{filename}"
+
+
     max_shift = 20
 
     output_path = f"./build/sbs/{max_shift}-{filename}"
