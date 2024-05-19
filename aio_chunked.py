@@ -59,7 +59,7 @@ if __name__ == "__main__":
     output_width = vinfo.width * 2  # side by side
 
     CHUNK_SIZE = 4 * 1024 * 1024 * 1024  # GB
-    CHUNK_FRAMES = CHUNK_SIZE // (vinfo.width * vinfo.height * 3)
+    CHUNK_FRAMES = CHUNK_SIZE // (output_width * vinfo.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, vinfo.height, output_width, 3), dtype=np.uint8)
 

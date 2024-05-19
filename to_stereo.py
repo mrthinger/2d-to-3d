@@ -58,7 +58,7 @@ if __name__ == "__main__":
     output_width = video_info.width
 
     CHUNK_SIZE = 1 * 1024 * 1024 * 1024  # GB
-    CHUNK_FRAMES = CHUNK_SIZE // (video_info.width * video_info.height * 3)
+    CHUNK_FRAMES = CHUNK_SIZE // (output_width * video_info.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, video_info.height, output_width, 3), dtype=np.uint8)
 
