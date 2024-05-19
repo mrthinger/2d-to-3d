@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
-
+# TODO: working on 2d->3d service
 class Item(BaseModel):
     name: str
     price: float
