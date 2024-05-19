@@ -11,6 +11,13 @@ push:
     docker push harbor.kymyth.com/kymyth/3d:latest
     docker push harbor.kymyth.com/kymyth/3d:{{VERSION}}
 
+segment:
+    mediafilesegmenter -iso-fragmented -t 4 \
+        -f build/playlist/sw \
+        -z sw20_iframe.m3u8 \
+        -b http://localhost:8443/build/playlist/sw \
+        build/spatial/sw20.mp4
+
 split-video:
     #!/usr/bin/env bash
     set -euxo pipefail
@@ -21,4 +28,10 @@ split-video:
         build/split/sw-depth-%03d.mp4
     
 combine-video:
-    ffmpeg -f concat -safe 0 -i <(for f in build/split/sw-depth-*.mp4; do echo "file '$f'"; done) -c copy build/combine/sw.mp4
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    tmpfile=$(mktemp)
+    find ./build/split/sbs-hevc-88 -name "*.mp4" -print0 | sort -z -n -t - -k 3 | xargs -0 -I {} echo "file '$(pwd)/{}'" >> $tmpfile
+    echo $tmpfile
+    ffmpeg -f concat -safe 0 -i $tmpfile -c copy build/sbs/sw-hevc-sbs-88.mp4
+    rm $tmpfile

@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 import ffmpeg
 from dataclasses import dataclass
@@ -35,20 +36,28 @@ def create_side_by_side_video(video_buffer: NDArray, max_shift: int):
 if __name__ == "__main__":
     os.makedirs('./build/sbs', exist_ok=True)
 
-    filename = "sw-depth-000.mp4"
+    if len(sys.argv) > 1:
+        filename = sys.argv[1]
+    else:
+        filename = "sw-depth-000.mp4"
+
     filepath = f"./build/split/{filename}"
+
+
+    # filename = "sw-depth-000.mp4"
+    # filepath = f"./build/split/{filename}"
 
     # filename = "fixed.mp4"
     # filepath = f"./build/depth/{filename}"
 
 
-    max_shift = 20
+    max_shift = 21
 
-    output_path = f"./build/sbs/{max_shift}-{filename}"
+    output_path = f"./build/sbs/88qv-{max_shift}-{filename}"
     video_info = get_video_info(filepath)
     output_width = video_info.width
 
-    CHUNK_SIZE = 2 * 1024 * 1024 * 1024  # GB
+    CHUNK_SIZE = 1 * 1024 * 1024 * 1024  # GB
     CHUNK_FRAMES = CHUNK_SIZE // (video_info.width * video_info.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, video_info.height, output_width, 3), dtype=np.uint8)
@@ -94,6 +103,7 @@ if __name__ == "__main__":
         # pix_fmt="yuv420p",
         # video_bitrate='8000k',
         # **{'allow_sw': '1'}
+        **{'q:v': '88'}
     ).overwrite_output().run_async(pipe_stdin=True)
     progress_bar = tqdm(total=video_info.num_frames, unit="frames")
 
@@ -119,7 +129,10 @@ if __name__ == "__main__":
             process_output.stdin.write(frame.tobytes())
             progress_bar.update(1)
 
-    process_input.wait()
     process_output.stdin.close()
     process_output.wait()
     progress_bar.close()
+
+    print('debug: waiting input (safe to close)')
+    process_input.stdin.close()
+    process_input.wait()
