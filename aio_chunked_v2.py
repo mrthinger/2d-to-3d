@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 import ffmpeg
 from dataclasses import dataclass
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from funcs import (
     EncoderType,
     get_filepaths,
@@ -26,7 +26,7 @@ class Args:
 if __name__ == "__main__":
     args = Args()
 
-    BATCH_SIZE = 8
+    BATCH_SIZE = 4
     DEVICE = "cuda:0"
     # DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     DTYPE = torch.float16
@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     output_width = vinfo.width * 2  # side by side
 
-    CHUNK_SIZE =int(0.5 * 1024 * 1024 * 1024)  # GB
+    CHUNK_SIZE =int(4 * 1024 * 1024 * 1024)  # GB
     CHUNK_FRAMES = CHUNK_SIZE // (output_width * vinfo.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, vinfo.height, output_width, 3), dtype=np.uint8)
@@ -56,9 +56,9 @@ if __name__ == "__main__":
 
     process_input = (
         ffmpeg.input(
-            filepath, threads=0, thread_queue_size=8192,
+            filepath, threads=0, thread_queue_size=8192
         )
-        .output("pipe:", format="rawvideo", pix_fmt="rgb24", loglevel="quiet")
+        .output("pipe:", format="rawvideo", pix_fmt="rgb24", loglevel="quiet",)
         .global_args("-hwaccel", "cuda")
         # .global_args("-hwaccel_output_format", "cuda")
         .run_async(pipe_stdout=True)
@@ -90,31 +90,30 @@ if __name__ == "__main__":
     output = ffmpeg.output(
         in_modified,
         in_original,
-        local_output_path + ".mp4",
+        local_output_path + ".mkv",
         acodec="copy",
-        crf=11,
-        # vcodec="libx264",
-        # pix_fmt="yuv420p",
-        preset="faster",
+        vcodec="av1_nvenc",
+        preset="p1", 
         threads=0,
         framerate=vinfo.framerate,
         s=f"{output_width}x{vinfo.height}",
+        pix_fmt="yuv420p",
         loglevel="quiet",
     )
 
     process_output = output.overwrite_output().run_async(pipe_stdin=True)
 
-    progress_bar = tqdm(total=vinfo.num_frames, unit="frames")
-    write_progress_bar = tqdm(total=0, unit="frames", leave=False)
+    total_progress = tqdm(total=vinfo.num_frames, unit="frames", desc="Total Progress")
+    chunk_progress = tqdm(total=CHUNK_FRAMES, unit="frames", leave=False, position=1)
 
     for chunk_start in range(0, vinfo.num_frames, CHUNK_FRAMES):
         chunk_end = min(chunk_start + CHUNK_FRAMES, vinfo.num_frames)
         chunk_frames = chunk_end - chunk_start
 
-        write_progress_bar.total = chunk_frames
-        write_progress_bar.reset()
+        chunk_progress.reset(total=chunk_frames)
+        chunk_progress.set_description("Read")
 
-        progress_bar.set_description("read")
+        # Read phase
         for i in range(chunk_frames):
             in_bytes = process_input.stdout.read(vinfo.width * vinfo.height * 3)
             if not in_bytes:
@@ -123,9 +122,12 @@ if __name__ == "__main__":
             vbuffer[i, :, : vinfo.width, :] = np.frombuffer(in_bytes, np.uint8).reshape(
                 [vinfo.height, vinfo.width, 3]
             )
+            chunk_progress.update(1)
 
+        # Depth phase
+        chunk_progress.reset(total=chunk_frames)
+        chunk_progress.set_description("Depth")
         for i in range(0, chunk_frames, BATCH_SIZE):
-            progress_bar.set_description("depth")
             batch_start = i
             batch_end = min(i + BATCH_SIZE, chunk_frames)
             batch_size = batch_end - batch_start
@@ -158,15 +160,26 @@ if __name__ == "__main__":
 
             vbuffer[batch_start:batch_end, :, vinfo.width :, :] = depth_color_batch
 
-            progress_bar.update(batch_size)
+            chunk_progress.update(batch_size)
 
-        progress_bar.set_description("write")
+        # Write phase
+        chunk_progress.reset(total=chunk_frames)
+        chunk_progress.set_description("Write")
         for frame in vbuffer[:chunk_frames]:
             process_output.stdin.write(frame.tobytes())
-            write_progress_bar.update(1)
+            chunk_progress.update(1)
+            total_progress.update(1)
 
+
+    chunk_progress.close()
+    total_progress.close()
+
+    process_input.stdout.close()
+    print("Input stream closed")
     process_input.wait()
+    print("Input process completed")
     process_output.stdin.close()
+    print("Output stream closed")
     process_output.wait()
-    write_progress_bar.close()
-    progress_bar.close()
+    print("Output process completed")
+
