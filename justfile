@@ -22,7 +22,7 @@ split-video:
     #!/usr/bin/env bash
     set -euxo pipefail
     duration=`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 build/misc/sw-depth.mp4`
-    seg_time=`echo "$duration / 15.9" | bc`
+    seg_time=`echo "$duration / 1.7" | bc`
     ffmpeg -i build/misc/sw-depth.mp4 -c copy -map 0 \
         -segment_time $seg_time -f segment -reset_timestamps 1 \
         build/split/sw-depth-%03d.mp4
@@ -35,3 +35,6 @@ combine-video:
     echo $tmpfile
     ffmpeg -f concat -safe 0 -i $tmpfile -c copy build/sbs/sw-hevc-sbs-88.mp4
     rm $tmpfile
+
+convert-hevc:
+    ffmpeg -i build/sbs/sw-hevc-sbs-88.mp4 -c:v hevc_videotoolbox -q:v 70 build/sbs/sw-hevc-sbs-88-q70.mp4

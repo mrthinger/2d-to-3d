@@ -1,5 +1,3 @@
-torch==2.3.0
-torchvision
 numpy
 ffmpeg-python
 tqdm
@@ -8,3 +6,6 @@ python-dotenv
 fastapi
 uvicorn[standard]
 pydantic
+torch==2.4.0
+torchvision
+xformers==0.0.27.post2

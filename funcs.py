@@ -6,19 +6,8 @@ import ffmpeg
 from depth_anything.dpt import DepthAnything
 from dataclasses import dataclass
 
-model_configs = {
-    "vitl": {
-        "encoder": "vitl",
-        "features": 256,
-        "out_channels": [256, 512, 1024, 1024],
-    },
-    "vitb": {
-        "encoder": "vitb",
-        "features": 128,
-        "out_channels": [96, 192, 384, 768],
-    },
-    "vits": {"encoder": "vits", "features": 64, "out_channels": [48, 96, 192, 384]},
-}
+from depth_anything_v2.dpt import DepthAnythingV2
+
 
 EncoderType = Literal["vits", "vitb", "vitl"]
 
@@ -26,12 +15,58 @@ EncoderType = Literal["vits", "vitb", "vitl"]
 def load_model(
     encoder: EncoderType, device: torch.device, dtype: torch.dtype
 ) -> DepthAnything:
+    model_configs = {
+        "vitl": {
+            "encoder": "vitl",
+            "features": 256,
+            "out_channels": [256, 512, 1024, 1024],
+        },
+        "vitb": {
+            "encoder": "vitb",
+            "features": 128,
+            "out_channels": [96, 192, 384, 768],
+        },
+        "vits": {"encoder": "vits", "features": 64, "out_channels": [48, 96, 192, 384]},
+    }
     depth_anything = DepthAnything(model_configs[encoder])
     depth_anything.load_state_dict(
         torch.load(f"./checkpoints/depth_anything_{encoder}14.pth")
     )
     depth_anything = depth_anything.to(device, dtype=dtype).eval()
 
+    total_params = sum(param.numel() for param in depth_anything.parameters())
+    print("Total parameters: {:.2f}M".format(total_params / 1e6))
+
+    return depth_anything
+
+
+def load_model_v2(
+    encoder: EncoderType, device: torch.device, dtype: torch.dtype
+) -> DepthAnythingV2:
+    model_configs = {
+        "vits": {"encoder": "vits", "features": 64, "out_channels": [48, 96, 192, 384]},
+        "vitb": {
+            "encoder": "vitb",
+            "features": 128,
+            "out_channels": [96, 192, 384, 768],
+        },
+        "vitl": {
+            "encoder": "vitl",
+            "features": 256,
+            "out_channels": [256, 512, 1024, 1024],
+        },
+        "vitg": {
+            "encoder": "vitg",
+            "features": 384,
+            "out_channels": [1536, 1536, 1536, 1536],
+        },
+    }
+
+    depth_anything = DepthAnythingV2(**model_configs[encoder])
+    depth_anything.load_state_dict(
+        torch.load(f"checkpoints/depth_anything_v2_{encoder}.pth")
+    )
+    depth_anything = depth_anything.to(device, dtype=dtype).eval()
     total_params = sum(param.numel() for param in depth_anything.parameters())
     print("Total parameters: {:.2f}M".format(total_params / 1e6))
 
@@ -74,7 +109,7 @@ def resize_and_pad(frames_batch: torch.Tensor):
 
     # Scale height to 518 (518/14 = 37)
     # TODO: auto determine this or set to 77
-    target_height = 77 * 14 * 1 # 37 -> 77 patches (increased res / less downscale)
+    target_height = 60 * 14 * 1  # 37 -> 77 patches (increased res / less downscale)
 
     target_width = int(target_height * aspect_ratio)
 
@@ -112,11 +147,15 @@ def get_video_info(filepath: str) -> VideoInfo:
 
     if "nb_frames" not in video_info:
         # Use ffprobe to get the number of frames
-        result = ffmpeg.probe(filepath, select_streams='v', show_entries='stream=nb_read_packets', count_packets=None)
-        num_frames = int(result['streams'][0]['nb_read_packets'])
+        result = ffmpeg.probe(
+            filepath,
+            select_streams="v",
+            show_entries="stream=nb_read_packets",
+            count_packets=None,
+        )
+        num_frames = int(result["streams"][0]["nb_read_packets"])
     else:
         num_frames = int(video_info["nb_frames"])
-    
 
     return VideoInfo(
         width=int(video_info["width"]),
