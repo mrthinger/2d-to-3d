@@ -1,4 +1,4 @@
-import cv2
+# import cv2
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,7 +6,7 @@ from torchvision.transforms import Compose
 
 from .dinov2 import DINOv2
 from .util.blocks import FeatureFusionBlock, _make_scratch
-from .util.transform import Resize, NormalizeImage, PrepareForNet
+# from .util.transform import Resize, NormalizeImage, PrepareForNet
 
 
 def _make_fusion_block(features, use_bn, size=None):
@@ -193,29 +193,29 @@ class DepthAnythingV2(nn.Module):
         
         return depth.cpu().numpy()
     
-    def image2tensor(self, raw_image, input_size=518):        
-        transform = Compose([
-            Resize(
-                width=input_size,
-                height=input_size,
-                resize_target=False,
-                keep_aspect_ratio=True,
-                ensure_multiple_of=14,
-                resize_method='lower_bound',
-                image_interpolation_method=cv2.INTER_CUBIC,
-            ),
-            NormalizeImage(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            PrepareForNet(),
-        ])
+    # def image2tensor(self, raw_image, input_size=518):        
+    #     transform = Compose([
+    #         Resize(
+    #             width=input_size,
+    #             height=input_size,
+    #             resize_target=False,
+    #             keep_aspect_ratio=True,
+    #             ensure_multiple_of=14,
+    #             resize_method='lower_bound',
+    #             image_interpolation_method=cv2.INTER_CUBIC,
+    #         ),
+    #         NormalizeImage(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    #         PrepareForNet(),
+    #     ])
         
-        h, w = raw_image.shape[:2]
+    #     h, w = raw_image.shape[:2]
         
-        image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB) / 255.0
+    #     image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB) / 255.0
         
-        image = transform({'image': image})['image']
-        image = torch.from_numpy(image).unsqueeze(0)
+    #     image = transform({'image': image})['image']
+    #     image = torch.from_numpy(image).unsqueeze(0)
         
-        DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
-        image = image.to(DEVICE)
+    #     DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+    #     image = image.to(DEVICE)
         
-        return image, (h, w)
+    #     return image, (h, w)

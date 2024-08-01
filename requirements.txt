@@ -9,3 +9,4 @@ pydantic
 torch==2.4.0
 torchvision
 xformers==0.0.27.post2
+setuptools

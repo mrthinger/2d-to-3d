@@ -18,7 +18,7 @@ from funcs import (
 
 @dataclass
 class Args:
-    video_path: str = "./build/src/og_10_15.webm"
+    video_path: str = "./build/src/blade_runner_first_10sec.mkv"
     encoder: EncoderType = "vitl"  #  vits, vitb, vitl
     outdir: str = "./build/depth"
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     output_width = vinfo.width * 2  # side by side
 
-    CHUNK_SIZE =int( 0.5 * 1024 * 1024 * 1024)  # GB
+    CHUNK_SIZE =int(0.5 * 1024 * 1024 * 1024)  # GB
     CHUNK_FRAMES = CHUNK_SIZE // (output_width * vinfo.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, vinfo.height, output_width, 3), dtype=np.uint8)
@@ -54,11 +54,13 @@ if __name__ == "__main__":
         vbuffer.size * vbuffer.itemsize,
     )
 
-    process = (
+    process_input = (
         ffmpeg.input(
             filepath, threads=0, thread_queue_size=8192,
         )
         .output("pipe:", format="rawvideo", pix_fmt="rgb24", loglevel="quiet")
+        .global_args("-hwaccel", "cuda")
+        # .global_args("-hwaccel_output_format", "cuda")
         .run_async(pipe_stdout=True)
     )
 
@@ -114,7 +116,7 @@ if __name__ == "__main__":
 
         progress_bar.set_description("read")
         for i in range(chunk_frames):
-            in_bytes = process.stdout.read(vinfo.width * vinfo.height * 3)
+            in_bytes = process_input.stdout.read(vinfo.width * vinfo.height * 3)
             if not in_bytes:
                 break
 
@@ -163,7 +165,7 @@ if __name__ == "__main__":
             process_output.stdin.write(frame.tobytes())
             write_progress_bar.update(1)
 
-    process.wait()
+    process_input.wait()
     process_output.stdin.close()
     process_output.wait()
     write_progress_bar.close()
