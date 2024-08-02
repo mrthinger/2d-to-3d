@@ -97,7 +97,7 @@ if __name__ == "__main__":
         threads=0,
         framerate=vinfo.framerate,
         s=f"{output_width}x{vinfo.height}",
-        pix_fmt="yuv420p",
+        pix_fmt="yuv444p",
         loglevel="quiet",
     )
 
