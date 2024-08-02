@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     output_width = vinfo.width * 2  # side by side
 
-    CHUNK_SIZE =int(4 * 1024 * 1024 * 1024)  # GB
+    CHUNK_SIZE =int(2 * 1024 * 1024 * 1024)  # GB
     CHUNK_FRAMES = CHUNK_SIZE // (output_width * vinfo.height * 3)
 
     vbuffer = np.zeros((CHUNK_FRAMES, vinfo.height, output_width, 3), dtype=np.uint8)
@@ -92,8 +92,8 @@ if __name__ == "__main__":
         in_original,
         local_output_path + ".mkv",
         acodec="copy",
-        vcodec="av1_nvenc",
-        preset="p1", 
+        vcodec="hevc_nvenc",
+        preset="lossless",
         threads=0,
         framerate=vinfo.framerate,
         s=f"{output_width}x{vinfo.height}",

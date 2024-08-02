@@ -18,7 +18,7 @@ from funcs import (
 
 @dataclass
 class Args:
-    video_path: str = "./build/src/blade_runner_first_10sec.mkv"
+    video_path: str = "./build/src/br_5min.mkv"
     encoder: EncoderType = "vitl"  #  vits, vitb, vitl
     outdir: str = "./build/depth"
     world_size: int = 8  # Total number of GPUs
@@ -197,6 +197,7 @@ def run_worker_process(rank, args):
         video_frames = torch.empty((BATCH_SIZE, vinfo_height, vinfo_width, 3), dtype=torch.uint8, device=DEVICE)
         dist.recv(video_frames, src=args.io_gpu)
         
+        depth_frames = video_frames.to(DTYPE)
         depth_frames = preprocess_batch(depth_frames, mean, std)
         
         with torch.no_grad():
@@ -252,8 +253,8 @@ def setup_output_process(args, filepath, vinfo, output_width):
         in_original,
         local_output_path + ".mkv",
         acodec="copy",
-        vcodec="av1_nvenc",
-        preset="p7",
+        vcodec="hevc_nvenc",
+        preset="lossless",
         threads=0,
         framerate=vinfo.framerate,
         s=f"{output_width}x{vinfo.height}",
