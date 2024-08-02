@@ -18,11 +18,12 @@ from funcs import (
 
 @dataclass
 class Args:
-    video_path: str = "./build/src/blade_runner_first_10sec.mkv"
+    video_path: str = "./build/src/br_5min.mkv"
     encoder: EncoderType = "vitl"  #  vits, vitb, vitl
     outdir: str = "./build/depth"
     world_size: int = 8  # Total number of GPUs
     io_gpu: int = 0  # GPU to use for I/O operations
+    maxShift = 20
 
 BATCH_SIZE = 4
 DTYPE = torch.float16
@@ -47,6 +48,29 @@ def run_depth_estimation(rank, args):
     #     print(f"Error in process {rank}: {str(e)}")
     finally:
         cleanup()
+
+def side_by_side_inplace(video_buffer: torch.Tensor, max_shift: int):
+    num_frames, height, width, _ = video_buffer.shape
+    single_video_width = width // 2
+
+    depth_map = video_buffer[:, :, single_video_width:, 0].float()
+    min_depth = torch.min(depth_map)
+    max_depth = torch.max(depth_map)
+    depth_range = max_depth - min_depth
+
+    # Precalculate the disparity map using the depth map buffer
+    depth_map -= min_depth
+    depth_map /= depth_range
+    depth_map *= max_shift
+    depth_map = depth_map.int()
+
+    for i in range(num_frames):
+        for y in range(height):
+            shifts = depth_map[i, y, :]
+            shifted_xs = torch.clamp(torch.arange(single_video_width, device=video_buffer.device) + shifts, 0, single_video_width - 1)
+            video_buffer[i, y, single_video_width:, :] = video_buffer[i, y, shifted_xs, :]
+
+    return video_buffer
 
 def run_main_process(args):
     DEVICE = f"cuda:{args.io_gpu}"
@@ -91,11 +115,6 @@ def run_main_process(args):
     while total_frames_processed < vinfo.num_frames:
         frames_to_process = min(total_batch_size, vinfo.num_frames - total_frames_processed)
         
-        # Pad the input_buffer if necessary
-        if frames_to_process < total_batch_size:
-            padding = total_batch_size - frames_to_process
-            input_buffer[frames_to_process:] = input_buffer[frames_to_process-1].repeat(padding, 1, 1, 1)
-        
         # Distribute frames to worker processes
         for i in range(args.world_size):
             if i != args.io_gpu:
@@ -124,12 +143,14 @@ def run_main_process(args):
         
         # Concatenate input and output frames
         combined_frames = torch.cat([input_buffer[:frames_to_process], output_buffer[:frames_to_process]], dim=2)
-        combined_frames = combined_frames.cpu().numpy()
+        combined_frames = combined_frames.to(DEVICE)  # Ensure combined_frames is on the correct device
+        
+        combined_frames = side_by_side_inplace(combined_frames, args.maxShift)
 
         # Write to output
-        for i in range(frames_to_process):
-            process_output.stdin.write(combined_frames[i].tobytes())
-            total_progress.update(1)
+        frame_bytes = combined_frames.cpu().numpy()[:frames_to_process].tobytes()
+        process_output.stdin.write(frame_bytes)
+        total_progress.update(frames_to_process)
         
         # Swap buffers and update counters
         input_buffer, next_input_buffer = next_input_buffer, input_buffer
