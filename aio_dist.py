@@ -18,7 +18,7 @@ from funcs import (
 
 @dataclass
 class Args:
-    video_path: str = "./build/src/br_5min.mkv"
+    video_path: str = "./build/src/blade_runner_first_10sec.mkv"
     encoder: EncoderType = "vitl"  #  vits, vitb, vitl
     outdir: str = "./build/depth"
     world_size: int = 8  # Total number of GPUs
@@ -49,26 +49,28 @@ def run_depth_estimation(rank, args):
     finally:
         cleanup()
 
-def side_by_side_inplace(video_buffer: torch.Tensor, max_shift: int):
+@torch.jit.script
+def side_by_side(video_buffer: torch.Tensor, depth_buffer: torch.Tensor, max_shift: int):
     num_frames, height, width, _ = video_buffer.shape
-    single_video_width = width // 2
+    single_video_width = width
 
-    depth_map = video_buffer[:, :, single_video_width:, 0].float()
+    depth_map = depth_buffer
     min_depth = torch.min(depth_map)
     max_depth = torch.max(depth_map)
     depth_range = max_depth - min_depth
 
     # Precalculate the disparity map using the depth map buffer
-    depth_map -= min_depth
-    depth_map /= depth_range
-    depth_map *= max_shift
+    depth_map = depth_map - min_depth
+    depth_map = depth_map / depth_range
+    depth_map = depth_map * max_shift
     depth_map = depth_map.int()
 
+    arng = torch.arange(single_video_width, device=video_buffer.device)
     for i in range(num_frames):
         for y in range(height):
             shifts = depth_map[i, y, :]
-            shifted_xs = torch.clamp(torch.arange(single_video_width, device=video_buffer.device) + shifts, 0, single_video_width - 1)
-            video_buffer[i, y, single_video_width:, :] = video_buffer[i, y, shifted_xs, :]
+            shifted_xs = torch.clamp(arng + shifts, 0, single_video_width - 1)
+            video_buffer[i, y, :, :] = video_buffer[i, y, shifted_xs, :]
 
     return video_buffer
 
@@ -96,12 +98,12 @@ def run_main_process(args):
     
     print(f"[DEBUG] Total batch size: {total_batch_size}")  # Debug print
     
-    total_progress = tqdm(total=vinfo.num_frames, unit="frames", desc="Total Progress")
     
     # Broadcast video info to all processes
     vinfo_tensor = torch.tensor([vinfo.height, vinfo.width], dtype=torch.float32, device=DEVICE)
     dist.broadcast(vinfo_tensor, src=args.io_gpu)
     
+    total_progress = tqdm(total=vinfo.num_frames, unit="frames", desc="Total Progress")
     total_frames_processed = 0
     
     # Read first batch
@@ -143,9 +145,6 @@ def run_main_process(args):
         
         # Concatenate input and output frames
         combined_frames = torch.cat([input_buffer[:frames_to_process], output_buffer[:frames_to_process]], dim=2)
-        combined_frames = combined_frames.to(DEVICE)  # Ensure combined_frames is on the correct device
-        
-        combined_frames = side_by_side_inplace(combined_frames, args.maxShift)
 
         # Write to output
         frame_bytes = combined_frames.cpu().numpy()[:frames_to_process].tobytes()
@@ -174,6 +173,7 @@ def run_worker_process(rank, args):
     DEVICE = f"cuda:{rank}"
     
     depth_anything = load_model_v2(args.encoder, DEVICE, DTYPE)
+    depth_anything.compile()
     mean, std = load_input_stats(DEVICE, DTYPE)
     
     # Receive video info from main process
@@ -185,8 +185,6 @@ def run_worker_process(rank, args):
     
     termination_signal = torch.empty(1, dtype=torch.int32, device=DEVICE)
     
-    total_frames_processed = 0
-    
     while True:
         # First, receive a small tensor to check for termination or skip
         dist.recv(termination_signal, src=args.io_gpu)
@@ -196,39 +194,31 @@ def run_worker_process(rank, args):
         elif termination_signal.item() == 0:
             continue  # No frames to process this iteration
         
-        frames = torch.empty((BATCH_SIZE, vinfo_height, vinfo_width, 3), dtype=torch.uint8, device=DEVICE)
-        dist.recv(frames, src=args.io_gpu)
+        video_frames = torch.empty((BATCH_SIZE, vinfo_height, vinfo_width, 3), dtype=torch.uint8, device=DEVICE)
+        dist.recv(video_frames, src=args.io_gpu)
         
-        # Process only the received frames
-        actual_batch_size = frames.shape[0]
-        frames = frames[:actual_batch_size]
-        
-        frames = frames.to(DTYPE).contiguous()  # Ensure contiguity after type conversion
-        frames = preprocess_batch(frames, mean, std)
+        depth_frames = preprocess_batch(depth_frames, mean, std)
         
         with torch.no_grad():
-            frames = depth_anything(frames)
+            depth_frames = depth_anything(depth_frames)
         
-        frames = F.interpolate(
-            frames[None],
+        depth_frames = F.interpolate(
+            depth_frames[None],
             (vinfo_height, vinfo_width),
             mode="bicubic",
             align_corners=False,
         )[0]
         
-        frames = (
-            (frames - frames.min())
-            / (frames.max() - frames.min())
+        depth_frames = (
+            (depth_frames - depth_frames.min())
+            / (depth_frames.max() - depth_frames.min())
             * 255.0
         )
-        frames = torch.repeat_interleave(frames.unsqueeze(-1), 3, dim=-1).to(dtype=torch.uint8)
         
-        dist.send(frames.contiguous(), dst=args.io_gpu)
+        video_frames = side_by_side(video_frames, depth_frames, args.maxShift)
         
-        total_frames_processed += actual_batch_size
-    
-    print(f"Worker {rank} processed {total_frames_processed} frames")
-
+        dist.send(video_frames, dst=args.io_gpu)
+        
 def setup_input_process(filepath):
     return (
         ffmpeg.input(filepath, threads=0, thread_queue_size=8192)
@@ -240,7 +230,7 @@ def setup_input_process(filepath):
 def setup_output_process(args, filepath, vinfo, output_width):
     filename = os.path.basename(filepath)
     timestamp = time.strftime("%H%M%S")
-    output_name = filename[: filename.rfind(".")] + f"_video_depth_{timestamp}"
+    output_name = filename[: filename.rfind(".")] + f"_video_sbs_{args.maxShift}_{timestamp}"
     local_output_path = os.path.join(args.outdir, output_name)
     
     in_modified = ffmpeg.input(
