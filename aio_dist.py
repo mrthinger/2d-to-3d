@@ -18,7 +18,7 @@ from funcs import (
 
 @dataclass
 class Args:
-    video_path: str = "./build/src/br_5min.mkv"
+    video_path: str = "./build/src/br.mkv"
     encoder: EncoderType = "vitl"  #  vits, vitb, vitl
     outdir: str = "./build/depth"
     world_size: int = 8  # Total number of GPUs
@@ -254,8 +254,10 @@ def setup_output_process(args, filepath, vinfo, output_width):
         local_output_path + ".mkv",
         acodec="copy",
         vcodec="hevc_nvenc",
-        preset="lossless",
+        preset="p7",
+        tune="hq",
         threads=0,
+        cq=15,
         framerate=vinfo.framerate,
         s=f"{output_width}x{vinfo.height}",
         pix_fmt="yuv444p",
